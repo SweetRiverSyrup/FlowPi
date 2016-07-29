@@ -1,0 +1,81 @@
+#!/bin/bash
+set -e
+
+# Raspberry Pi FlowPi setup script
+# Ian Fabs and Caitlin Chou
+# www.ianfabs.xyz
+# www.caitlinchou.gov
+# 
+# Usage: $ sudo /etc/init.d/flowpisetup
+#
+# Net install:
+#   $ curl https://raw.github.com/stephendotexe/raspberrypi/master/roles/dnsmasq_server | sudo sh
+
+# Must be run as root
+if [[ `whoami` != "root" ]]
+then
+  echo "This install must be run as root or with sudo."
+  exit
+fi
+#First, install nodejs
+apt-get install nodejs
+
+#install mysql
+#The default password MUST be alpine or web server will not work
+apt-get install mariadb-server
+
+mysql -u root -p
+#Put in password
+quit
+#Now we upload database
+cd /etc/mysql
+mkdir cleanslate
+cd ./cleanslate/
+curl -O https://raw.githubusercontent.com/SweetRiverSyrup/FlowPi/master/cleanDB.sql
+mysql --user=root --password=alpine
+source cleanDB.sql
+quit
+service mysql restart
+
+#install the dhcp to handle requests on Ad-Hoc
+apt-get install isc-dhcp-server
+#stop process so we can edit config
+service isc-dhcp-server stop
+cat - > /etc/dhcp/dhcpd.conf <<DHCPDCONF
+#
+#DNS Configuration for FlowPI
+#
+
+ddns-update-style interim;
+
+default-lease-time 600;
+max-lease-time 7200;
+authoritative;
+log-facility local7;
+subnet 192.168.1.0 netmask 255.255.255.0 {
+  range 192.168.1.2 192.168.1.150;
+}
+
+DHCPDCONF
+
+service isc-dhcp-server restart
+
+apt-get install -y dnsmasq
+cat - > /etc/dnsmasq.conf <<DNSMASQCONF
+#/etc/dnsmasq.conf
+
+#local domain setup
+domain=flowpi.local
+resolv-file=/etc/resolv.dnsmasq
+min-port=4096
+server=8.8.8.8
+server=4.4.4.4
+
+#max cache
+cache-size=10000
+
+DNSMASQCONF
+
+service dnsmasq restart
+
+echo 'Installation complete. Enjoy!'
